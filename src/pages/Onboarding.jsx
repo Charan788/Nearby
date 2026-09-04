@@ -257,18 +257,22 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack }) {
   const videoRef = useRef(null)
   const imgRef = useRef(null)
   const [cameraReady, setCameraReady] = useState(false)
+  const [modelsLoading, setModelsLoading] = useState(true)
 
   const startCamera = useCallback(async () => {
     setCameraReady(false)
+    setModelsLoading(true)
     setVerification((v) => ({ ...v, status: 'idle', message: '' }))
     try {
       await loadModels()
+      setModelsLoading(false)
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         setCameraReady(true)
       }
     } catch (err) {
+      setModelsLoading(false)
       setVerification((v) => ({ ...v, status: 'failed', message: 'Camera blocked. Allow camera in browser settings then click Retry.' }))
     }
   }, [setVerification])
@@ -334,8 +338,8 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack }) {
       <div className="relative mt-8 mx-auto h-72 w-72 overflow-hidden rounded-full border-4 border-paper/10">
         <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
         {!cameraReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-ink-light text-sm text-paper/50">
-            Starting camera...
+          <div className="absolute inset-0 flex items-center justify-center bg-ink-light text-sm text-paper/50 text-center px-4">
+            {modelsLoading ? 'Loading AI models... (first time takes ~10 seconds)' : 'Starting camera...'}
           </div>
         )}
       </div>
