@@ -258,22 +258,28 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack }) {
   const imgRef = useRef(null)
   const [cameraReady, setCameraReady] = useState(false)
 
+  const startCamera = useCallback(async () => {
+    setCameraReady(false)
+    setVerification((v) => ({ ...v, status: 'idle', message: '' }))
+    try {
+      await loadModels()
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        setCameraReady(true)
+      }
+    } catch (err) {
+      setVerification((v) => ({ ...v, status: 'failed', message: 'Camera blocked. Allow camera in browser settings then click Retry.' }))
+    }
+  }, [setVerification])
+
   useEffect(() => {
-    let stream
-    async function setup() {
-      try {
-        await loadModels()
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          setCameraReady(true)
-        }
-      } catch (err) {
-        setVerification((v) => ({ ...v, status: 'failed', message: 'Camera access is needed to verify your face.' }))
+    startCamera()
+    return () => {
+      if (videoRef.current?.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach((t) => t.stop())
       }
     }
-    setup()
-    return () => stream?.getTracks().forEach((t) => t.stop())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -358,6 +364,8 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack }) {
         </button>
         {verification.status === 'passed' ? (
           <PrimaryButton onClick={onNext}>Continue</PrimaryButton>
+        ) : verification.status === 'failed' ? (
+          <PrimaryButton onClick={startCamera}>Retry camera</PrimaryButton>
         ) : (
           <PrimaryButton
             disabled={!cameraReady || verification.status === 'checking'}
