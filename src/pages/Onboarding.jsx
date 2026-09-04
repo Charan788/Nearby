@@ -172,44 +172,97 @@ function PrimaryButton({ children, ...props }) {
 }
 
 function AccountStep({ data, setData, onNext }) {
+  const [mode, setMode] = useState('signup')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const canContinue = data.email.includes('@') && data.password.length >= 6
+  const canContinue =
+    data.email.includes('@') && data.password.length >= 6
 
-  const createAccount = async () => {
+  const handleSubmit = async () => {
+    if (!canContinue || loading) return
+
     setLoading(true)
     setError('')
 
-    const { data: authData, error: signUpError } =
-      await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-      })
+    try {
+      if (mode === 'signup') {
+        const { data: authData, error: signUpError } =
+          await supabase.auth.signUp({
+            email: data.email,
+            password: data.password,
+          })
 
-    if (signUpError) {
-      setError(signUpError.message)
+        if (signUpError) throw signUpError
+
+        if (!authData.user) {
+          throw new Error('Account could not be created.')
+        }
+
+        onNext()
+      } else {
+        const { data: authData, error: loginError } =
+          await supabase.auth.signInWithPassword({
+            email: data.email,
+            password: data.password,
+          })
+
+        if (loginError) throw loginError
+
+        if (!authData.user) {
+          throw new Error('Login failed.')
+        }
+
+        window.location.href = '/discover'
+      }
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    if (!authData.user) {
-      setError('Account could not be created.')
-      setLoading(false)
-      return
-    }
-
-    setLoading(false)
-    onNext()
   }
 
   return (
     <div>
-      <h1 className="font-display text-3xl">Create your account</h1>
+      <h1 className="font-display text-3xl">
+        {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+      </h1>
 
       <p className="mt-2 text-paper/60">
-        You'll verify your face next — this part's just login info.
+        {mode === 'signup'
+          ? "You'll verify your face next — this part's just login info."
+          : 'Log in to continue to Nearby.'}
       </p>
+
+      <div className="mt-8 flex rounded-full border border-paper/10 bg-ink-light p-1">
+        <button
+          onClick={() => {
+            setMode('signup')
+            setError('')
+          }}
+          className={`flex-1 rounded-full py-2 text-sm ${
+            mode === 'signup'
+              ? 'bg-ember text-ink'
+              : 'text-paper/60'
+          }`}
+        >
+          Sign up
+        </button>
+
+        <button
+          onClick={() => {
+            setMode('login')
+            setError('')
+          }}
+          className={`flex-1 rounded-full py-2 text-sm ${
+            mode === 'login'
+              ? 'bg-ember text-ink'
+              : 'text-paper/60'
+          }`}
+        >
+          Log in
+        </button>
+      </div>
 
       <div className="mt-8 space-y-5">
         <div>
@@ -250,9 +303,13 @@ function AccountStep({ data, setData, onNext }) {
       <div className="mt-8">
         <PrimaryButton
           disabled={!canContinue || loading}
-          onClick={createAccount}
+          onClick={handleSubmit}
         >
-          {loading ? 'Creating account...' : 'Continue'}
+          {loading
+            ? 'Please wait...'
+            : mode === 'signup'
+              ? 'Create account'
+              : 'Log in'}
         </PrimaryButton>
       </div>
     </div>
