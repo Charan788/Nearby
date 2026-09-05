@@ -25,33 +25,24 @@ export default function Onboarding() {
     setSubmitting(true)
     setSubmitError('')
     try {
-      // 1. Create auth account.
+      // 1. Create auth account
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
       })
       if (authError) throw authError
-
-      const userId = authData.user?.id
-      if (!userId) {
-        throw new Error('Your account was created, but the session is not active yet. Please confirm your email and try again.')
-      }
-
-      // RLS policies on profiles/verifications require an active session for auth.uid().
-      // If email confirmation is enabled, signUp may not give us one yet.
-      const { data: sessionData, error: sessionError } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      })
-      if (sessionError) {
-        throw new Error('Your account is ready, but we could not sign you in to save your profile. Please confirm your email and try again.')
-      }
-
-      const activeUserId = sessionData.user?.id ?? userId
+      
+      // Wait briefly for session to be established
+      await new Promise(r => setTimeout(r, 1000))
+      
+      // Get the user from session (more reliable than authData.user)
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      const userId = sessionUser?.id || authData.user?.id
+      if (!userId) throw new Error('Failed to create account. Please try again.')
 
       // 2. Upload profile photo
       const photoExt = data.profilePhotoFile.name.split('.').pop()
-      const photoPath = `${activeUserId}/profile.${photoExt}`
+      const photoPath = `${userId}/profile.${photoExt}`
       const { error: photoError } = await supabase.storage
         .from('profile-photos')
         .upload(photoPath, data.profilePhotoFile, { upsert: true })
@@ -62,7 +53,7 @@ export default function Onboarding() {
         .getPublicUrl(photoPath)
 
       // 3. Upload selfie
-      const selfiePath = `${activeUserId}/selfie.jpg`
+      const selfiePath = `${userId}/selfie.jpg`
       const { error: selfieError } = await supabase.storage
         .from('selfies')
         .upload(selfiePath, verification.selfieBlob, { upsert: true })
@@ -74,7 +65,7 @@ export default function Onboarding() {
 
       // 4. Create profile row
       const { error: profileError } = await supabase.from('profiles').insert({
-        id: activeUserId,
+        id: userId,
         name: data.name,
         age: parseInt(data.age),
         gender: data.gender,
@@ -86,7 +77,7 @@ export default function Onboarding() {
 
       // 5. Create verification request row
       const { error: verError } = await supabase.from('verifications').insert({
-        user_id: activeUserId,
+        user_id: userId,
         claimed_gender: data.gender,
         profile_photo_url: photoUrlData.publicUrl,
         selfie_url: selfieUrlData.publicUrl,
@@ -98,11 +89,7 @@ export default function Onboarding() {
 
       next()
     } catch (err) {
-      const message = err?.message || 'Something went wrong. Please try again.'
-      const friendlyMessage = message.includes('row-level security')
-        ? 'We could not save your profile because the account session is missing. Please confirm your email and try again.'
-        : message
-      setSubmitError(friendlyMessage)
+      setSubmitError(err.message || 'Something went wrong. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -172,146 +159,24 @@ function PrimaryButton({ children, ...props }) {
 }
 
 function AccountStep({ data, setData, onNext }) {
-  const [mode, setMode] = useState('signup')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const canContinue =
-    data.email.includes('@') && data.password.length >= 6
-
-  const handleSubmit = async () => {
-    if (!canContinue || loading) return
-
-    setLoading(true)
-    setError('')
-
-    try {
-      if (mode === 'signup') {
-        const { data: authData, error: signUpError } =
-          await supabase.auth.signUp({
-            email: data.email,
-            password: data.password,
-          })
-
-        if (signUpError) throw signUpError
-
-        if (!authData.user) {
-          throw new Error('Account could not be created.')
-        }
-
-        onNext()
-      } else {
-        const { data: authData, error: loginError } =
-          await supabase.auth.signInWithPassword({
-            email: data.email,
-            password: data.password,
-          })
-
-        if (loginError) throw loginError
-
-        if (!authData.user) {
-          throw new Error('Login failed.')
-        }
-
-        window.location.href = '/discover'
-      }
-    } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  const canContinue = data.email.includes('@') && data.password.length >= 6
   return (
     <div>
-      <h1 className="font-display text-3xl">
-        {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-      </h1>
-
-      <p className="mt-2 text-paper/60">
-        {mode === 'signup'
-          ? "You'll verify your face next — this part's just login info."
-          : 'Log in to continue to Nearby.'}
-      </p>
-
-      <div className="mt-8 flex rounded-full border border-paper/10 bg-ink-light p-1">
-        <button
-          onClick={() => {
-            setMode('signup')
-            setError('')
-          }}
-          className={`flex-1 rounded-full py-2 text-sm ${
-            mode === 'signup'
-              ? 'bg-ember text-ink'
-              : 'text-paper/60'
-          }`}
-        >
-          Sign up
-        </button>
-
-        <button
-          onClick={() => {
-            setMode('login')
-            setError('')
-          }}
-          className={`flex-1 rounded-full py-2 text-sm ${
-            mode === 'login'
-              ? 'bg-ember text-ink'
-              : 'text-paper/60'
-          }`}
-        >
-          Log in
-        </button>
-      </div>
-
+      <h1 className="font-display text-3xl">Create your account</h1>
+      <p className="mt-2 text-paper/60">You'll verify your face next.</p>
       <div className="mt-8 space-y-5">
         <div>
           <FieldLabel>Email</FieldLabel>
-
-          <input
-            type="email"
-            className={inputClass}
-            value={data.email}
-            onChange={(e) =>
-              setData({ ...data, email: e.target.value })
-            }
-            placeholder="you@example.com"
-          />
+          <input type="email" className={inputClass} value={data.email}
+            onChange={(e) => setData({ ...data, email: e.target.value })} placeholder="you@example.com" />
         </div>
-
         <div>
           <FieldLabel>Password</FieldLabel>
-
-          <input
-            type="password"
-            className={inputClass}
-            value={data.password}
-            onChange={(e) =>
-              setData({ ...data, password: e.target.value })
-            }
-            placeholder="At least 6 characters"
-          />
+          <input type="password" className={inputClass} value={data.password}
+            onChange={(e) => setData({ ...data, password: e.target.value })} placeholder="At least 6 characters" />
         </div>
       </div>
-
-      {error && (
-        <p className="mt-4 text-sm text-ember">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-8">
-        <PrimaryButton
-          disabled={!canContinue || loading}
-          onClick={handleSubmit}
-        >
-          {loading
-            ? 'Please wait...'
-            : mode === 'signup'
-              ? 'Create account'
-              : 'Log in'}
-        </PrimaryButton>
-      </div>
+      <div className="mt-8"><PrimaryButton disabled={!canContinue} onClick={onNext}>Continue</PrimaryButton></div>
     </div>
   )
 }
