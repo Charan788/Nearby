@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import ProfileCard from '../components/ProfileCard.jsx'
-import MatchModal from '../components/MatchModal.jsx'
-import { supabase } from '../lib/supabase.js'
+import { AnimatePresence } from 'framer-motion'
+import SwipeCard from '../components/SwipeCard.jsx'
+import MatchAnimation from '../components/MatchAnimation.jsx'
+import DailyVibe from '../components/DailyVibe.jsx'
 import { BottomNav } from './Matches.jsx'
+import { supabase } from '../lib/supabase.js'
+import { calculateVibeMatch } from '../lib/vibeMatch.js'
 
 export default function Discover() {
   const navigate = useNavigate()
@@ -12,31 +14,34 @@ export default function Discover() {
   const [matchedProfile, setMatchedProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [myProfile, setMyProfile] = useState(null)
-  const [swipedIds, setSwipedIds] = useState(new Set())
+  const [myId, setMyId] = useState(null)
+  const [myAnswers, setMyAnswers] = useState([])
 
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { navigate('/onboarding'); return }
+      setMyId(user.id)
 
-      // Load my profile
       const { data: me } = await supabase.from('profiles').select('*').eq('id', user.id).single()
       setMyProfile(me)
+      if (!me?.verified) { setLoading(false); return }
 
-      if (!me?.verified) {
-        setLoading(false)
-        return
-      }
+      // My vibe answers
+      const { data: myVibeAnswers } = await supabase
+        .from('vibe_answers').select('*').eq('user_id', user.id)
+      setMyAnswers(myVibeAnswers || [])
 
-      // Load already-swiped IDs so we don't show them again
+      // Already swiped IDs
       const { data: swipes } = await supabase
-        .from('swipes')
-        .select('swiped_id')
-        .eq('swiper_id', user.id)
+        .from('swipes').select('swiped_id').eq('swiper_id', user.id)
       const alreadySwiped = new Set((swipes ?? []).map(s => s.swiped_id))
-      setSwipedIds(alreadySwiped)
 
-      // Load opposite gender verified profiles, excluding already swiped
+      // Blocked IDs
+      const { data: blocks } = await supabase
+        .from('blocks').select('blocked_id').eq('blocker_id', user.id)
+      const blockedIds = new Set((blocks ?? []).map(b => b.blocked_id))
+
       const oppositeGender = me.gender === 'Man' ? 'Woman' : 'Man'
       const { data } = await supabase
         .from('profiles')
@@ -46,8 +51,19 @@ export default function Discover() {
         .neq('id', user.id)
         .limit(30)
 
-      const fresh = (data ?? []).filter(p => !alreadySwiped.has(p.id))
-      setProfiles(fresh.map(p => ({ ...p, photoUrl: p.photo_url })))
+      const fresh = (data ?? []).filter(p => !alreadySwiped.has(p.id) && !blockedIds.has(p.id))
+
+      // Calculate vibe scores
+      const withVibe = await Promise.all(fresh.map(async (p) => {
+        const { data: theirAnswers } = await supabase
+          .from('vibe_answers').select('*').eq('user_id', p.id)
+        const vibe = calculateVibeMatch(myVibeAnswers || [], theirAnswers || [])
+        return { ...p, photoUrl: p.photo_url, vibeScore: vibe.score, vibeShared: vibe.shared }
+      }))
+
+      // Sort by vibe score — highest first
+      withVibe.sort((a, b) => b.vibeScore - a.vibeScore)
+      setProfiles(withVibe)
       setLoading(false)
     }
     init()
@@ -58,132 +74,144 @@ export default function Discover() {
     if (!swiped) return
     setProfiles(prev => prev.slice(1))
 
-    const { data: { user } } = await supabase.auth.getUser()
-
-    // Save swipe to DB
     await supabase.from('swipes').insert({
-      swiper_id: user.id,
+      swiper_id: myId,
       swiped_id: swiped.id,
       direction,
     })
 
     if (direction === 'like') {
-      // Check if they already liked us back -> mutual match
       const { data: theirSwipe } = await supabase
-        .from('swipes')
-        .select('id')
-        .eq('swiper_id', swiped.id)
-        .eq('swiped_id', user.id)
-        .eq('direction', 'like')
+        .from('swipes').select('id')
+        .eq('swiper_id', swiped.id).eq('swiped_id', myId).eq('direction', 'like')
         .maybeSingle()
 
       if (theirSwipe) {
-        // It's a match — create match row
         const { data: match } = await supabase
-          .from('matches')
-          .insert({ user_a: user.id, user_b: swiped.id })
-          .select()
-          .single()
-        setMatchedProfile({ ...swiped, matchId: match?.id })
+          .from('matches').insert({ user_a: myId, user_b: swiped.id })
+          .select().single()
+        setMatchedProfile({
+          ...swiped,
+          matchId: match?.id,
+          vibeScore: swiped.vibeScore,
+          vibeShared: swiped.vibeShared,
+        })
       }
     }
-  }, [profiles])
+  }, [profiles, myId])
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-ink">
-        <p className="text-paper/50">Loading...</p>
-      </div>
-    )
+  const handleButtonSwipe = (dir) => {
+    if (profiles.length > 0) handleSwipe(dir)
   }
 
-  // Not verified yet
-  if (!myProfile?.verified) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-ink px-6 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-gold">
+  if (loading) return (
+    <div className="flex min-h-screen items-center justify-center bg-ink">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-ember border-t-transparent animate-spin" />
+        <p className="text-paper/40 text-sm">Finding your matches...</p>
+      </div>
+    </div>
+  )
+
+  if (!myProfile?.verified) return (
+    <div className="flex min-h-screen flex-col bg-ink">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-gold mb-4">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
             <path d="M12 2 4 6v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6l-8-4Z" fill="currentColor" />
           </svg>
         </div>
-        <h2 className="mt-6 font-display text-2xl text-paper">Pending verification</h2>
-        <p className="mt-3 max-w-sm text-paper/60">
-          Your profile is in the review queue. You'll be able to browse once a moderator approves your selfie — usually within a few hours.
+        <h2 className="font-display text-2xl text-paper">Pending verification</h2>
+        <p className="mt-3 max-w-sm text-paper/60 text-sm">
+          Your profile is in review. You'll be able to browse once approved — usually a few hours.
         </p>
-        <button
-          onClick={() => navigate('/profile/edit')}
-          className="mt-8 rounded-full border border-paper/20 px-6 py-2.5 text-sm text-paper/70"
-        >
-          Edit profile while you wait
+        <button onClick={() => navigate('/profile/edit')}
+          className="mt-6 rounded-full border border-paper/20 px-6 py-2.5 text-sm text-paper/70">
+          Edit profile
         </button>
       </div>
-    )
-  }
+      <BottomNav active="discover" />
+    </div>
+  )
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-ink px-6 py-8 text-paper">
-      {/* Top bar */}
-      <div className="flex w-full max-w-sm items-center justify-between">
-        <h1 className="font-display text-2xl">Discover</h1>
-        <button
-          onClick={() => navigate('/profile/edit')}
-          className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-paper/20 bg-ink-light"
-        >
+    <div className="flex h-screen flex-col bg-ink text-paper overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-12 pb-3 shrink-0">
+        <h1 className="font-display text-2xl">Nearby</h1>
+        <button onClick={() => navigate('/profile/edit')}
+          className="h-9 w-9 overflow-hidden rounded-full border-2 border-paper/20">
           {myProfile?.photo_url
             ? <img src={myProfile.photo_url} alt="Me" className="h-full w-full object-cover" />
-            : <span className="text-paper/40 text-xs">Me</span>}
+            : <div className="h-full w-full bg-ink-light" />}
         </button>
       </div>
 
-      {/* Card stack */}
-      <div className="relative mt-6 h-[480px] w-full max-w-sm">
-        <AnimatePresence>
-          {profiles.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center text-center text-paper/50">
-              <p className="font-display text-xl text-paper">You've seen everyone</p>
-              <p className="mt-2 text-sm">Check back later for new verified profiles.</p>
-            </div>
-          )}
-          {profiles.slice(0, 2).reverse().map((profile, i, arr) => (
-            <ProfileCard
-              key={profile.id}
-              profile={profile}
-              isTop={i === arr.length - 1}
-              onSwipe={handleSwipe}
-            />
-          ))}
-        </AnimatePresence>
+      {/* Daily Vibe */}
+      <DailyVibe userId={myId} onAnswer={() => {}} />
+
+      {/* Card stack — takes remaining space */}
+      <div className="relative flex-1 mx-4 mb-4">
+        {profiles.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center text-center rounded-3xl border border-paper/10 bg-ink-light">
+            <p className="text-5xl mb-4">🌙</p>
+            <p className="font-display text-xl text-paper">You've seen everyone</p>
+            <p className="mt-2 text-sm text-paper/50 max-w-xs">
+              New verified profiles show up daily. Check back tomorrow!
+            </p>
+          </div>
+        ) : (
+          <AnimatePresence>
+            {profiles.slice(0, 3).reverse().map((profile, i, arr) => (
+              <SwipeCard
+                key={profile.id}
+                profile={profile}
+                isTop={i === arr.length - 1}
+                onSwipe={handleSwipe}
+                vibeScore={i === arr.length - 1 ? profile.vibeScore : null}
+                vibeShared={i === arr.length - 1 ? profile.vibeShared : null}
+              />
+            ))}
+          </AnimatePresence>
+        )}
       </div>
 
       {/* Action buttons */}
       {profiles.length > 0 && (
-        <div className="mt-8 flex gap-6">
-          <button
-            onClick={() => handleSwipe('pass')}
-            className="flex h-14 w-14 items-center justify-center rounded-full border border-paper/20 text-2xl text-ember hover:border-ember transition-colors"
-            aria-label="Pass"
-          >
+        <div className="flex items-center justify-center gap-5 pb-4 shrink-0">
+          <button onClick={() => handleButtonSwipe('pass')}
+            className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-ember/30 bg-ink text-ember text-xl shadow-lg active:scale-95 transition-transform">
             ✕
           </button>
-          <button
-            onClick={() => handleSwipe('like')}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-ember text-2xl text-ink hover:bg-ember-dark transition-colors"
-            aria-label="Like"
-          >
+          <button onClick={() => handleButtonSwipe('pass')}
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-paper/15 bg-ink text-paper/50 text-lg active:scale-95 transition-transform">
+            ↶
+          </button>
+          <button onClick={() => handleButtonSwipe('like')}
+            className="flex h-16 w-16 items-center justify-center rounded-full bg-ember text-ink text-2xl shadow-lg shadow-ember/30 active:scale-95 transition-transform">
             ♥
+          </button>
+          <button
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-blue-400/30 bg-ink text-blue-400 text-lg active:scale-95 transition-transform"
+            title="Super Like"
+          >
+            ⭐
           </button>
         </div>
       )}
 
-      <MatchModal
-        profile={matchedProfile}
-        onClose={() => setMatchedProfile(null)}
-        onSendMessage={() => {
-          navigate(`/chat/${matchedProfile.matchId}`)
-          setMatchedProfile(null)
-        }}
-      />
       <BottomNav active="discover" />
+
+      {/* Match animation */}
+      <AnimatePresence>
+        {matchedProfile && (
+          <MatchAnimation
+            profile={matchedProfile}
+            myPhoto={myProfile?.photo_url}
+            onClose={() => setMatchedProfile(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }
