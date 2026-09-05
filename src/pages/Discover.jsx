@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import ProfileCard from '../components/ProfileCard.jsx'
 import MatchModal from '../components/MatchModal.jsx'
 import { supabase } from '../lib/supabase.js'
+import { BottomNav } from './Matches.jsx'
 
 export default function Discover() {
   const navigate = useNavigate()
@@ -182,6 +183,7 @@ export default function Discover() {
           setMatchedProfile(null)
         }}
       />
+      <BottomNav active="discover" />
     </div>
   )
 }

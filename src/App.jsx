@@ -6,6 +6,7 @@ import Chat from './pages/Chat.jsx'
 import AdminReview from './pages/AdminReview.jsx'
 import EditProfile from './pages/EditProfile.jsx'
 import VerificationStatus from './pages/VerificationStatus.jsx'
+import Matches from './pages/Matches.jsx'
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/status" element={<VerificationStatus />} />
       <Route path="/discover" element={<Discover />} />
+      <Route path="/matches" element={<Matches />} />
       <Route path="/chat/:matchId" element={<Chat />} />
       <Route path="/admin" element={<AdminReview />} />
       <Route path="/profile/edit" element={<EditProfile />} />
