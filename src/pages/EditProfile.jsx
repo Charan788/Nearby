@@ -45,14 +45,15 @@ export default function EditProfile() {
       let photo_url = profile.photo_url
 
       if (newPhotoFile) {
-        const ext = newPhotoFile.name.split('.').pop()
-        const path = `${user.id}/profile.${ext}`
+        // Always use jpg to avoid extension issues
+        const path = `${user.id}/profile.jpg`
         const { error: uploadError } = await supabase.storage
           .from('profile-photos')
-          .upload(path, newPhotoFile, { upsert: true })
-        if (uploadError) throw uploadError
+          .upload(path, newPhotoFile, { upsert: true, contentType: newPhotoFile.type || 'image/jpeg' })
+        if (uploadError) throw new Error('Photo upload failed: ' + uploadError.message)
+        // Force cache-bust so browser shows new photo immediately
         const { data: urlData } = supabase.storage.from('profile-photos').getPublicUrl(path)
-        photo_url = urlData.publicUrl
+        photo_url = urlData.publicUrl + '?t=' + Date.now()
       }
 
       const { error: updateError } = await supabase.from('profiles').update({
