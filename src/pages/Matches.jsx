@@ -161,36 +161,67 @@ export default function Matches() {
 
 export function BottomNav({ active }) {
   const navigate = useNavigate()
+
+  const tabs = [
+    {
+      id: 'discover',
+      label: 'Discover',
+      path: '/discover',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <circle cx="11" cy="11" r="7.5" />
+          <path d="m20.5 20.5-3.5-3.5" />
+        </svg>
+      ),
+    },
+    {
+      id: 'messages',
+      label: 'Messages',
+      path: '/matches',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z" />
+        </svg>
+      ),
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      path: '/profile/edit',
+      icon: (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+          <circle cx="12" cy="7" r="4" />
+          <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" />
+        </svg>
+      ),
+    },
+  ]
+
   return (
-    <nav className="flex border-t border-paper/10 bg-ink">
-      <button
-        onClick={() => navigate('/discover')}
-        className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${active === 'discover' ? 'text-ember' : 'text-paper/40 hover:text-paper/70'}`}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
-        </svg>
-        Discover
-      </button>
-      <button
-        onClick={() => navigate('/matches')}
-        className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${active === 'messages' ? 'text-ember' : 'text-paper/40 hover:text-paper/70'}`}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        Messages
-      </button>
-      <button
-        onClick={() => navigate('/profile/edit')}
-        className={`flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors ${active === 'profile' ? 'text-ember' : 'text-paper/40 hover:text-paper/70'}`}
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <circle cx="12" cy="8" r="4" /><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6" strokeLinecap="round" />
-        </svg>
-        Profile
-      </button>
-    </nav>
+    <div className="sticky bottom-0 flex justify-center border-t border-paper/10 bg-ink/95 backdrop-blur-md px-6 pb-safe">
+      <nav className="flex w-full max-w-sm items-center justify-around py-2">
+        {tabs.map((tab) => {
+          const isActive = active === tab.id
+          return (
+            <button
+              key={tab.id}
+              onClick={() => navigate(tab.path)}
+              className="flex flex-col items-center gap-1.5 px-5 py-2 rounded-2xl transition-all"
+            >
+              <div className={`transition-colors ${isActive ? 'text-ember' : 'text-paper/35'}`}>
+                {tab.icon}
+              </div>
+              <span className={`text-[11px] font-medium tracking-wide transition-colors ${isActive ? 'text-ember' : 'text-paper/35'}`}>
+                {tab.label}
+              </span>
+              {isActive && (
+                <div className="h-0.5 w-4 rounded-full bg-ember" />
+              )}
+            </button>
+          )
+        })}
+      </nav>
+    </div>
   )
 }
 
