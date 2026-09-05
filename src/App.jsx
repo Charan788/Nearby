@@ -4,6 +4,7 @@ import Onboarding from './pages/Onboarding.jsx'
 import Discover from './pages/Discover.jsx'
 import Chat from './pages/Chat.jsx'
 import AdminReview from './pages/AdminReview.jsx'
+import EditProfile from './pages/EditProfile.jsx'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Route path="/discover" element={<Discover />} />
       <Route path="/chat/:matchId" element={<Chat />} />
       <Route path="/admin" element={<AdminReview />} />
+      <Route path="/profile/edit" element={<EditProfile />} />
     </Routes>
   )
 }
