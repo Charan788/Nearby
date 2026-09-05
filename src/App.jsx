@@ -5,12 +5,14 @@ import Discover from './pages/Discover.jsx'
 import Chat from './pages/Chat.jsx'
 import AdminReview from './pages/AdminReview.jsx'
 import EditProfile from './pages/EditProfile.jsx'
+import VerificationStatus from './pages/VerificationStatus.jsx'
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/status" element={<VerificationStatus />} />
       <Route path="/discover" element={<Discover />} />
       <Route path="/chat/:matchId" element={<Chat />} />
       <Route path="/admin" element={<AdminReview />} />

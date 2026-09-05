@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { loadModels, checkLiveness, compareFaces } from '../lib/faceVerification'
 
 const STEPS = ['account', 'basics', 'photo', 'selfie', 'review']
 
 export default function Onboarding() {
+  const navigate = useNavigate()
+  const [mode, setMode] = useState('signup') // 'signup' | 'login'
   const [stepIndex, setStepIndex] = useState(0)
   const [data, setData] = useState({
     email: '', password: '', name: '', age: '', gender: '', bio: '',
@@ -25,45 +28,31 @@ export default function Onboarding() {
     setSubmitting(true)
     setSubmitError('')
     try {
-      // 1. Create auth account
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
       })
       if (authError) throw authError
-      
-      // Wait briefly for session to be established
+
       await new Promise(r => setTimeout(r, 1000))
-      
-      // Get the user from session (more reliable than authData.user)
       const { data: { user: sessionUser } } = await supabase.auth.getUser()
       const userId = sessionUser?.id || authData.user?.id
       if (!userId) throw new Error('Failed to create account. Please try again.')
 
-      // 2. Upload profile photo
-      const photoExt = data.profilePhotoFile.name.split('.').pop()
-      const photoPath = `${userId}/profile.${photoExt}`
+      const photoPath = `${userId}/profile.jpg`
       const { error: photoError } = await supabase.storage
         .from('profile-photos')
-        .upload(photoPath, data.profilePhotoFile, { upsert: true })
-      if (photoError) throw photoError
+        .upload(photoPath, data.profilePhotoFile, { upsert: true, contentType: data.profilePhotoFile.type || 'image/jpeg' })
+      if (photoError) throw new Error('Photo upload failed: ' + photoError.message)
+      const { data: photoUrlData } = supabase.storage.from('profile-photos').getPublicUrl(photoPath)
 
-      const { data: photoUrlData } = supabase.storage
-        .from('profile-photos')
-        .getPublicUrl(photoPath)
-
-      // 3. Upload selfie
       const selfiePath = `${userId}/selfie.jpg`
       const { error: selfieError } = await supabase.storage
         .from('selfies')
-        .upload(selfiePath, verification.selfieBlob, { upsert: true })
-      if (selfieError) throw selfieError
+        .upload(selfiePath, verification.selfieBlob, { upsert: true, contentType: 'image/jpeg' })
+      if (selfieError) throw new Error('Selfie upload failed: ' + selfieError.message)
+      const { data: selfieUrlData } = supabase.storage.from('selfies').getPublicUrl(selfiePath)
 
-      const { data: selfieUrlData } = supabase.storage
-        .from('selfies')
-        .getPublicUrl(selfiePath)
-
-      // 4. Create profile row
       const { error: profileError } = await supabase.from('profiles').insert({
         id: userId,
         name: data.name,
@@ -73,9 +62,8 @@ export default function Onboarding() {
         photo_url: photoUrlData.publicUrl,
         verified: false,
       })
-      if (profileError) throw profileError
+      if (profileError) throw new Error('Profile save failed: ' + profileError.message)
 
-      // 5. Create verification request row
       const { error: verError } = await supabase.from('verifications').insert({
         user_id: userId,
         claimed_gender: data.gender,
@@ -85,7 +73,7 @@ export default function Onboarding() {
         ai_liveness_passed: true,
         status: 'pending_review',
       })
-      if (verError) throw verError
+      if (verError) throw new Error('Verification save failed: ' + verError.message)
 
       next()
     } catch (err) {
@@ -93,6 +81,11 @@ export default function Onboarding() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Login mode
+  if (mode === 'login') {
+    return <LoginScreen onSwitch={() => setMode('signup')} onSuccess={() => navigate('/status')} />
   }
 
   return (
@@ -108,7 +101,9 @@ export default function Onboarding() {
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="mt-10"
           >
-            {step === 'account' && <AccountStep data={data} setData={setData} onNext={next} />}
+            {step === 'account' && (
+              <AccountStep data={data} setData={setData} onNext={next} onSwitchToLogin={() => setMode('login')} />
+            )}
             {step === 'basics' && <BasicsStep data={data} setData={setData} onNext={next} onBack={back} />}
             {step === 'photo' && <PhotoStep data={data} setData={setData} onNext={next} onBack={back} />}
             {step === 'selfie' && (
@@ -122,13 +117,82 @@ export default function Onboarding() {
                 submitError={submitError}
               />
             )}
-            {step === 'review' && <ReviewStep data={data} verification={verification} />}
+            {step === 'review' && <ReviewStep data={data} />}
           </motion.div>
         </AnimatePresence>
       </div>
     </div>
   )
 }
+
+// ---------- Login Screen ----------
+
+function LoginScreen({ onSwitch, onSuccess }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const login = async () => {
+    setLoading(true)
+    setError('')
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
+    if (err) {
+      setError(err.message)
+      setLoading(false)
+    } else {
+      onSuccess()
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-ink px-6">
+      <div className="w-full max-w-md">
+        <h1 className="font-display text-3xl text-paper">Welcome back</h1>
+        <p className="mt-2 text-paper/60">Sign in to continue</p>
+        <div className="mt-8 space-y-5">
+          <div>
+            <label className="mb-2 block text-sm text-paper/60">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full rounded-xl border border-paper/15 bg-ink-light px-4 py-3 text-paper placeholder:text-paper/30 focus:border-ember outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm text-paper/60">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && login()}
+              placeholder="Your password"
+              className="w-full rounded-xl border border-paper/15 bg-ink-light px-4 py-3 text-paper placeholder:text-paper/30 focus:border-ember outline-none"
+            />
+          </div>
+        </div>
+        {error && <p className="mt-4 text-sm text-ember">{error}</p>}
+        <button
+          onClick={login}
+          disabled={loading || !email.includes('@') || !password}
+          className="mt-8 w-full rounded-full bg-ember py-3 font-medium text-ink disabled:opacity-40"
+        >
+          {loading ? 'Signing in...' : 'Sign in'}
+        </button>
+        <p className="mt-6 text-center text-sm text-paper/50">
+          Don't have an account?{' '}
+          <button onClick={onSwitch} className="text-ember hover:underline">
+            Sign up
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ---------- Shared components ----------
 
 function ProgressBar({ current, total }) {
   return (
@@ -158,7 +222,7 @@ function PrimaryButton({ children, ...props }) {
   )
 }
 
-function AccountStep({ data, setData, onNext }) {
+function AccountStep({ data, setData, onNext, onSwitchToLogin }) {
   const canContinue = data.email.includes('@') && data.password.length >= 6
   return (
     <div>
@@ -177,6 +241,10 @@ function AccountStep({ data, setData, onNext }) {
         </div>
       </div>
       <div className="mt-8"><PrimaryButton disabled={!canContinue} onClick={onNext}>Continue</PrimaryButton></div>
+      <p className="mt-6 text-center text-sm text-paper/50">
+        Already have an account?{' '}
+        <button onClick={onSwitchToLogin} className="text-ember hover:underline">Sign in</button>
+      </p>
     </div>
   )
 }
@@ -233,7 +301,7 @@ function PhotoStep({ data, setData, onNext, onBack }) {
   return (
     <div>
       <h1 className="font-display text-3xl">Add your photo</h1>
-      <p className="mt-2 text-paper/60">Just one clear photo of your face. We'll check it matches a live selfie next.</p>
+      <p className="mt-2 text-paper/60">Just one clear photo of your face.</p>
       <div className="mt-8 flex flex-col items-center">
         <button onClick={() => fileRef.current?.click()}
           className="flex h-56 w-56 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-paper/25 bg-ink-light">
@@ -271,7 +339,7 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack, submi
       }
     } catch (err) {
       setModelsLoading(false)
-      setVerification((v) => ({ ...v, status: 'failed', message: 'Camera blocked. Allow camera in browser settings then click Retry.' }))
+      setVerification((v) => ({ ...v, status: 'failed', message: 'Camera blocked. Allow camera then click Retry.' }))
     }
   }, [setVerification])
 
@@ -302,7 +370,7 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack, submi
       canvas.height = videoRef.current.videoHeight
       canvas.getContext('2d').drawImage(videoRef.current, 0, 0)
       canvas.toBlob((blob) => {
-        setVerification({ status: 'passed', message: 'Face verified! Submitting your profile...', matchDistance: match.distance, selfieBlob: blob })
+        setVerification({ status: 'passed', message: 'Face verified! Tap Submit to continue.', matchDistance: match.distance, selfieBlob: blob })
       }, 'image/jpeg', 0.9)
     } catch (err) {
       setVerification((v) => ({ ...v, status: 'failed', message: 'Something went wrong. Try again.' }))
@@ -312,7 +380,7 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack, submi
   return (
     <div>
       <h1 className="font-display text-3xl">Live selfie check</h1>
-      <p className="mt-2 text-paper/60">Look at the camera and hold still. This confirms it is really you.</p>
+      <p className="mt-2 text-paper/60">Look at the camera and hold still.</p>
       <div className="relative mt-8 mx-auto h-72 w-72 overflow-hidden rounded-full border-4 border-paper/10">
         <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
         {!cameraReady && (
@@ -348,6 +416,7 @@ function SelfieStep({ data, verification, setVerification, onNext, onBack, submi
 }
 
 function ReviewStep({ data }) {
+  const navigate = useNavigate()
   return (
     <div className="text-center">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-gold">
@@ -357,9 +426,12 @@ function ReviewStep({ data }) {
       </div>
       <h1 className="mt-6 font-display text-3xl">You are in the queue</h1>
       <p className="mt-3 text-paper/60">
-        Hi {data.name || 'there'} - your selfie passed the automatic check and is now with a human moderator. This usually takes a few hours.
+        Hi {data.name || 'there'} — your selfie passed the check and is with a moderator. Usually takes a few hours.
       </p>
-      <p className="mt-6 text-sm text-paper/40">We will email you at {data.email} once you are verified.</p>
+      <p className="mt-6 text-sm text-paper/40">We will email you at {data.email} once verified.</p>
+      <button onClick={() => navigate('/discover')} className="mt-8 rounded-full border border-paper/20 px-6 py-2.5 text-sm text-paper/70">
+        Go to Discover
+      </button>
     </div>
   )
 }
