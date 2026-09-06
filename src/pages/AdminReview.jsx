@@ -56,58 +56,37 @@ export default function AdminReview() {
         .update({ verified: true })
         .eq('id', userId)
 
-      // Mark referral as verified and reward referrer if threshold reached
-      const { data: ref } = await supabase
-        .from('referrals').select('*').eq('referred_id', userId).single()
-      
-      if (ref && ref.referrer_id) {
-        // Update referral status to verified
-        await supabase.from('referrals')
-          .update({ status: 'verified' })
-          .eq('id', ref.id)
+      // Mark referral as verified and reward referrer
+      try {
+        const { data: ref } = await supabase
+          .from('referrals').select('*').eq('referred_id', userId).maybeSingle()
+        
+        if (ref && ref.referrer_id) {
+          await supabase.from('referrals').update({ status: 'verified' }).eq('id', ref.id)
 
-        // Wait briefly for the update to commit
-        await new Promise(r => setTimeout(r, 500))
-
-        // Count ALL verified referrals for this referrer (including the one we just verified)
-        const { data: allRefs } = await supabase
-          .from('referrals')
-          .select('id, status')
-          .eq('referrer_id', ref.referrer_id)
-          .in('status', ['verified', 'rewarded'])
-
-        const verifiedCount = (allRefs || []).length
-
-        // Update referral count on referrer profile
-        await supabase.from('profiles')
-          .update({ referral_count: verifiedCount })
-          .eq('id', ref.referrer_id)
-
-        // Every 3 verified referrals = 7 days Plus free
-        if (verifiedCount > 0 && verifiedCount % 3 === 0) {
-          const { data: referrer } = await supabase
-            .from('profiles')
-            .select('plan, plan_expires_at')
-            .eq('id', ref.referrer_id)
-            .single()
-          
-          const baseDate = referrer?.plan_expires_at && new Date(referrer.plan_expires_at) > new Date()
-            ? new Date(referrer.plan_expires_at)
-            : new Date()
-          baseDate.setDate(baseDate.getDate() + 7)
-
-          await supabase.from('profiles').update({
-            plan: 'plus',
-            plan_expires_at: baseDate.toISOString(),
-          }).eq('id', ref.referrer_id)
-
-          // Mark referral as rewarded
-          await supabase.from('referrals')
-            .update({ status: 'rewarded' })
+          const { data: allRefs } = await supabase
+            .from('referrals').select('id')
             .eq('referrer_id', ref.referrer_id)
-            .eq('status', 'verified')
+            .in('status', ['verified', 'rewarded'])
+
+          const verifiedCount = (allRefs || []).length + 1
+
+          await supabase.from('profiles')
+            .update({ referral_count: verifiedCount })
+            .eq('id', ref.referrer_id)
+
+          if (verifiedCount % 3 === 0) {
+            const { data: referrer } = await supabase
+              .from('profiles').select('plan_expires_at').eq('id', ref.referrer_id).single()
+            const baseDate = referrer?.plan_expires_at && new Date(referrer.plan_expires_at) > new Date()
+              ? new Date(referrer.plan_expires_at) : new Date()
+            baseDate.setDate(baseDate.getDate() + 7)
+            await supabase.from('profiles').update({
+              plan: 'plus', plan_expires_at: baseDate.toISOString()
+            }).eq('id', ref.referrer_id)
+          }
         }
-      }
+      } catch (e) { console.log('referral update error', e) }
     }
 
     setPending((prev) => prev.filter((v) => v.id !== verificationId))

@@ -100,6 +100,56 @@ export default function Discover() {
     }
   }, [profiles, myId])
 
+  const handleSuperLike = useCallback(async () => {
+    const swiped = profiles[0]
+    if (!swiped || !myId) return
+
+    // Check daily limit (3 for free, unlimited for plus/gold)
+    const today = new Date(); today.setHours(0,0,0,0)
+    const { count } = await supabase
+      .from('super_likes')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_id', myId)
+      .gte('created_at', today.toISOString())
+
+    const myPlan = await supabase.from('profiles').select('plan').eq('id', myId).single()
+    const isPremium = myPlan?.data?.plan === 'plus' || myPlan?.data?.plan === 'gold'
+
+    if (!isPremium && count >= 3) {
+      alert('You\'ve used your 3 free super likes today. Upgrade to Plus for unlimited!')
+      return
+    }
+
+    // Send super like
+    await supabase.from('super_likes').upsert({
+      sender_id: myId,
+      receiver_id: swiped.id,
+    })
+
+    // Also register as a like in swipes
+    await supabase.from('swipes').upsert({
+      swiper_id: myId,
+      swiped_id: swiped.id,
+      direction: 'like',
+    })
+
+    // Remove from stack with animation
+    setProfiles(prev => prev.slice(1))
+
+    // Check for mutual match
+    const { data: theirSwipe } = await supabase
+      .from('swipes').select('id')
+      .eq('swiper_id', swiped.id).eq('swiped_id', myId).eq('direction', 'like')
+      .maybeSingle()
+
+    if (theirSwipe) {
+      const { data: match } = await supabase
+        .from('matches').insert({ user_a: myId, user_b: swiped.id })
+        .select().single()
+      setMatchedProfile({ ...swiped, matchId: match?.id })
+    }
+  }, [profiles, myId])
+
   const handleButtonSwipe = (dir) => {
     if (profiles.length > 0) handleSwipe(dir)
   }
@@ -192,6 +242,7 @@ export default function Discover() {
             ♥
           </button>
           <button
+            onClick={() => handleSuperLike()}
             className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-blue-400/30 bg-ink text-blue-400 text-lg active:scale-95 transition-transform"
             title="Super Like"
           >

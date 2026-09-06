@@ -33,23 +33,34 @@ export default function Invite() {
       }
       setProfile(prof)
 
-      // Get referrals with referred user profiles
+      // Get referrals - simple query without named FK joins
       const { data: refs } = await supabase
         .from('referrals')
-        .select('id, status, created_at, referred_id')
+        .select('id, status, created_at, referred_id, referrer_id')
         .eq('referrer_id', user.id)
         .order('created_at', { ascending: false })
 
       if (refs?.length) {
+        // Fetch referred profiles separately
         const enriched = await Promise.all(refs.map(async (r) => {
           const { data: p } = await supabase
             .from('profiles')
             .select('name, photo_url, verified')
             .eq('id', r.referred_id)
             .single()
-          return { ...r, referred: p }
+          return { ...r, referred: p || null }
         }))
         setReferrals(enriched)
+        
+        // Also update profile referral_count based on verified ones
+        const verifiedCount = enriched.filter(r => 
+          r.status === 'verified' || r.status === 'rewarded'
+        ).length
+        if (prof.referral_count !== verifiedCount) {
+          await supabase.from('profiles')
+            .update({ referral_count: verifiedCount })
+            .eq('id', user.id)
+        }
       } else {
         setReferrals([])
       }
