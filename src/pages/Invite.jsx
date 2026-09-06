@@ -33,13 +33,26 @@ export default function Invite() {
       }
       setProfile(prof)
 
-      // Get referrals
+      // Get referrals with referred user profiles
       const { data: refs } = await supabase
         .from('referrals')
-        .select('*, referred:profiles!referrals_referred_id_fkey(name, photo_url, verified)')
+        .select('id, status, created_at, referred_id')
         .eq('referrer_id', user.id)
         .order('created_at', { ascending: false })
-      setReferrals(refs || [])
+
+      if (refs?.length) {
+        const enriched = await Promise.all(refs.map(async (r) => {
+          const { data: p } = await supabase
+            .from('profiles')
+            .select('name, photo_url, verified')
+            .eq('id', r.referred_id)
+            .single()
+          return { ...r, referred: p }
+        }))
+        setReferrals(enriched)
+      } else {
+        setReferrals([])
+      }
       setLoading(false)
     }
     load()
