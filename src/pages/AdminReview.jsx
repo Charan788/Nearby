@@ -55,6 +55,41 @@ export default function AdminReview() {
       await supabase.from('profiles')
         .update({ verified: true })
         .eq('id', userId)
+
+      // Mark referral as verified and reward referrer if threshold reached
+      const { data: ref } = await supabase
+        .from('referrals').select('*').eq('referred_id', userId).single()
+      
+      if (ref) {
+        await supabase.from('referrals').update({ status: 'verified' }).eq('id', ref.id)
+        
+        // Count verified referrals for referrer
+        const { count } = await supabase.from('referrals')
+          .select('id', { count: 'exact', head: true })
+          .eq('referrer_id', ref.referrer_id)
+          .eq('status', 'verified')
+
+        // Update referral count on referrer profile
+        await supabase.from('profiles')
+          .update({ referral_count: count })
+          .eq('id', ref.referrer_id)
+
+        // Every 3 verified referrals = 7 days Plus
+        if (count % 3 === 0) {
+          const { data: referrer } = await supabase
+            .from('profiles').select('plan, plan_expires_at').eq('id', ref.referrer_id).single()
+          
+          const baseDate = referrer?.plan_expires_at && new Date(referrer.plan_expires_at) > new Date()
+            ? new Date(referrer.plan_expires_at)
+            : new Date()
+          baseDate.setDate(baseDate.getDate() + 7)
+
+          await supabase.from('profiles').update({
+            plan: 'plus',
+            plan_expires_at: baseDate.toISOString(),
+          }).eq('id', ref.referrer_id)
+        }
+      }
     }
 
     setPending((prev) => prev.filter((v) => v.id !== verificationId))

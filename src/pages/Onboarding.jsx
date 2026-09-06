@@ -75,6 +75,20 @@ export default function Onboarding() {
       })
       if (verError) throw new Error('Verification save failed: ' + verError.message)
 
+      // Track referral if exists
+      if (referralCode) {
+        const { data: referrer } = await supabase
+          .from('profiles').select('id').eq('invite_code', referralCode).single()
+        if (referrer) {
+          await supabase.from('referrals').insert({
+            referrer_id: referrer.id,
+            referred_id: userId,
+            status: 'pending',
+          })
+        }
+        sessionStorage.removeItem('referral_code')
+      }
+
       next()
     } catch (err) {
       setSubmitError(err.message || 'Something went wrong. Please try again.')
