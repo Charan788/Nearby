@@ -27,6 +27,7 @@ export default function Onboarding() {
   const handleFinalSubmit = async () => {
     setSubmitting(true)
     setSubmitError('')
+    const referralCode = sessionStorage.getItem('referral_code')
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
