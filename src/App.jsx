@@ -8,6 +8,7 @@ import EditProfile from './pages/EditProfile.jsx'
 import VerificationStatus from './pages/VerificationStatus.jsx'
 import Matches from './pages/Matches.jsx'
 import Premium from './pages/Premium.jsx'
+import Pricing from './pages/Pricing.jsx'
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
       <Route path="/admin" element={<AdminReview />} />
       <Route path="/profile/edit" element={<EditProfile />} />
       <Route path="/premium" element={<Premium />} />
+      <Route path="/pricing" element={<Pricing />} />
     </Routes>
   )
 }
