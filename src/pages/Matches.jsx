@@ -221,24 +221,24 @@ export function BottomNav({ active }) {
   ]
 
   return (
-    <div className="sticky bottom-0 flex justify-center border-t border-paper/10 bg-ink/95 backdrop-blur-md px-6 pb-safe">
-      <nav className="flex w-full max-w-sm items-center justify-around py-2">
+    <div className="sticky bottom-0 border-t border-paper/10 bg-ink/95 backdrop-blur-md">
+      <nav className="flex w-full items-center justify-around py-2 px-1">
         {tabs.map((tab) => {
           const isActive = active === tab.id
           return (
             <button
               key={tab.id}
               onClick={() => navigate(tab.path)}
-              className="flex flex-col items-center gap-1.5 px-5 py-2 rounded-2xl transition-all"
+              className="flex flex-1 flex-col items-center gap-1 py-1.5 rounded-xl transition-all min-w-0"
             >
               <div className={`transition-colors ${isActive ? 'text-ember' : 'text-paper/35'}`}>
                 {tab.icon}
               </div>
-              <span className={`text-[11px] font-medium tracking-wide transition-colors ${isActive ? 'text-ember' : 'text-paper/35'}`}>
+              <span className={`text-[10px] font-medium transition-colors truncate w-full text-center ${isActive ? 'text-ember' : 'text-paper/35'}`}>
                 {tab.label}
               </span>
               {isActive && (
-                <div className="h-0.5 w-4 rounded-full bg-ember" />
+                <div className="h-0.5 w-3 rounded-full bg-ember" />
               )}
             </button>
           )
