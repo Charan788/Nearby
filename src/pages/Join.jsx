@@ -10,7 +10,7 @@ export default function Join() {
   useEffect(() => {
     if (ref) {
       // Store ref code in sessionStorage so onboarding can pick it up
-      sessionStorage.setItem('referral_code', ref)
+      localStorage.setItem('nearby_referral_code', ref)
     }
     navigate('/onboarding')
   }, [ref, navigate])

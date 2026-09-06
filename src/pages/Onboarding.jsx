@@ -27,7 +27,7 @@ export default function Onboarding() {
   const handleFinalSubmit = async () => {
     setSubmitting(true)
     setSubmitError('')
-    const referralCode = sessionStorage.getItem('referral_code')
+    const referralCode = localStorage.getItem('nearby_referral_code')
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
@@ -87,7 +87,7 @@ export default function Onboarding() {
             status: 'pending',
           })
         }
-        sessionStorage.removeItem('referral_code')
+        localStorage.removeItem('nearby_referral_code')
       }
 
       next()
