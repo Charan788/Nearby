@@ -11,6 +11,7 @@ import Premium from './pages/Premium.jsx'
 import Pricing from './pages/Pricing.jsx'
 import Invite from './pages/Invite.jsx'
 import Join from './pages/Join.jsx'
+import Help from './pages/Help.jsx'
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
       <Route path="/premium" element={<Premium />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/invite" element={<Invite />} />
+      <Route path="/help" element={<Help />} />
     </Routes>
   )
 }

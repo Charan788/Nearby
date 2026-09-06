@@ -100,9 +100,10 @@ export default function EditProfile() {
             ← Back
           </button>
           <h1 className="font-display text-2xl">Edit profile</h1>
-          <button onClick={signOut} className="text-sm text-paper/40 hover:text-ember">
-            Sign out
-          </button>
+          <div className="flex gap-3">
+            <button onClick={() => navigate('/help')} className="text-sm text-paper/40 hover:text-paper">Help</button>
+            <button onClick={signOut} className="text-sm text-paper/40 hover:text-ember">Sign out</button>
+          </div>
         </div>
 
         {/* Photo */}
