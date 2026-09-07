@@ -9,6 +9,9 @@ export default function AdminReview() {
   const [pending, setPending] = useState([])
   const [loading, setLoading] = useState(true)
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 })
+  const [adminTab, setAdminTab] = useState('verifications') // 'verifications' | 'tickets' | 'reports'
+  const [tickets, setTickets] = useState([])
+  const [reports, setReports] = useState([])
 
   const login = () => {
     if (pw === ADMIN_PASSWORD) setAuthed(true)
@@ -19,6 +22,8 @@ export default function AdminReview() {
     if (!authed) return
     loadQueue()
     loadCounts()
+    loadTickets()
+    loadReports()
   }, [authed])
 
   const loadQueue = async () => {
@@ -30,6 +35,33 @@ export default function AdminReview() {
       .order('created_at', { ascending: true })
     setPending(data ?? [])
     setLoading(false)
+  }
+
+  const loadTickets = async () => {
+    const { data } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .order('created_at', { ascending: false })
+    setTickets(data ?? [])
+  }
+
+  const loadReports = async () => {
+    const { data } = await supabase
+      .from('reports')
+      .select('*, reporter:profiles!reports_reporter_id_fkey(name), reported:profiles!reports_reported_id_fkey(name)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+    setReports(data ?? [])
+  }
+
+  const resolveTicket = async (id, status) => {
+    await supabase.from('support_tickets').update({ status }).eq('id', id)
+    setTickets(prev => prev.map(t => t.id === id ? { ...t, status } : t))
+  }
+
+  const resolveReport = async (id, action) => {
+    await supabase.from('reports').update({ status: action }).eq('id', id)
+    setReports(prev => prev.filter(r => r.id !== id))
   }
 
   const loadCounts = async () => {
@@ -123,6 +155,22 @@ export default function AdminReview() {
         <button onClick={loadQueue} className="text-sm text-paper/50 hover:text-paper">Refresh</button>
       </div>
 
+      {/* Admin tabs */}
+      <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        {[
+          { id: 'verifications', label: '🛡️ Verifications', count: counts.pending },
+          { id: 'tickets', label: '💬 Support', count: tickets.filter(t => t.status === 'open').length },
+          { id: 'reports', label: '🚨 Reports', count: reports.length },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setAdminTab(tab.id)}
+            className={`rounded-full px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors shrink-0 ${
+              adminTab === tab.id ? 'bg-ember text-ink' : 'border border-paper/15 text-paper/60'
+            }`}>
+            {tab.label} {tab.count > 0 && <span className="ml-1 rounded-full bg-paper/20 px-1.5 text-xs">{tab.count}</span>}
+          </button>
+        ))}
+      </div>
+
       {/* Stats */}
       <div className="mt-4 flex gap-4">
         {[
@@ -137,8 +185,71 @@ export default function AdminReview() {
         ))}
       </div>
 
+      {/* Support Tickets */}
+      {adminTab === 'tickets' && (
+        <div className="mt-6 space-y-3">
+          {tickets.length === 0 && <p className="text-paper/50 text-sm">No support tickets</p>}
+          {tickets.map(t => (
+            <div key={t.id} className="rounded-2xl border border-paper/10 bg-ink-light p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="font-medium text-sm">{t.subject}</p>
+                  <p className="text-xs text-paper/50">{t.email} • {new Date(t.created_at).toLocaleDateString()}</p>
+                </div>
+                <span className={`text-xs rounded-full px-2 py-1 ${
+                  t.status === 'open' ? 'bg-ember/20 text-ember' :
+                  t.status === 'resolved' ? 'bg-sage/20 text-sage' : 'bg-paper/10 text-paper/50'
+                }`}>{t.status}</span>
+              </div>
+              <p className="text-sm text-paper/70 bg-ink rounded-xl px-3 py-2 mb-3">{t.message}</p>
+              <div className="flex gap-2">
+                <a href={`mailto:${t.email}?subject=Re: ${t.subject}&body=Hi, thanks for reaching out to Nearby support.`}
+                  className="flex-1 rounded-full bg-ember py-2 text-center text-xs font-medium text-ink">
+                  Reply via Email
+                </a>
+                <a href={`https://wa.me/91${t.email?.includes('@') ? '' : t.email}?text=Hi, this is Nearby support regarding your query: ${t.subject}`}
+                  className="rounded-full border border-sage/40 px-3 py-2 text-xs text-sage">
+                  WhatsApp
+                </a>
+                {t.status === 'open' && (
+                  <button onClick={() => resolveTicket(t.id, 'resolved')}
+                    className="rounded-full border border-paper/20 px-3 py-2 text-xs text-paper/50">
+                    Resolve
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reports */}
+      {adminTab === 'reports' && (
+        <div className="mt-6 space-y-3">
+          {reports.length === 0 && <p className="text-paper/50 text-sm">No pending reports</p>}
+          {reports.map(r => (
+            <div key={r.id} className="rounded-2xl border border-ember/20 bg-ink-light p-4">
+              <p className="font-medium text-sm mb-1">
+                {r.reporter?.name || 'User'} reported {r.reported?.name || 'User'}
+              </p>
+              <p className="text-xs text-paper/50 mb-2">Reason: {r.reason} • {new Date(r.created_at).toLocaleDateString()}</p>
+              <div className="flex gap-2">
+                <button onClick={() => resolveReport(r.id, 'reviewed')}
+                  className="flex-1 rounded-full bg-ember py-2 text-xs font-medium text-ink">
+                  Ban reported user
+                </button>
+                <button onClick={() => resolveReport(r.id, 'dismissed')}
+                  className="flex-1 rounded-full border border-paper/20 py-2 text-xs text-paper/50">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Queue */}
-      <div className="mt-8">
+      {adminTab === 'verifications' && <div className="mt-8">
         {loading && <p className="text-paper/50">Loading...</p>}
         {!loading && pending.length === 0 && (
           <div className="rounded-2xl border border-paper/10 bg-ink-light p-10 text-center text-paper/50">

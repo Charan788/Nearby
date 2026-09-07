@@ -74,7 +74,7 @@ export default function Help() {
 
   const openWhatsApp = () => {
     const text = `Hi Nearby Support,\n\nEmail: ${userEmail}\nSubject: ${form.subject || 'Help needed'}\n\n${form.message || ''}`
-    window.open(`https://wa.me/918520984056?text=${encodeURIComponent(text)}`, '_blank')
+    window.open(`https://wa.me/919885420114?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   return (
@@ -93,7 +93,7 @@ export default function Help() {
         >
           <span className="text-2xl">💬</span>
           <p className="font-medium text-ember mt-2">Contact us</p>
-          <p className="text-xs text-paper/50 mt-0.5">We reply within 24h</p>
+          <p className="text-xs text-paper/50 mt-0.5">nearby.dating1@gmail.com</p>
         </button>
         <button
           onClick={openWhatsApp}
