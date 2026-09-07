@@ -25,6 +25,7 @@ export default function Landing() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           >
+            <img src="/logo.png" alt="Nearby" className="h-20 w-20 rounded-2xl mb-6" />
             <h1 className="font-display text-5xl leading-[1.05] font-medium md:text-6xl">
               Every face here is a real person.
             </h1>

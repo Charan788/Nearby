@@ -188,7 +188,7 @@ export default function Discover() {
     <div className="flex h-screen flex-col bg-ink text-paper overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-12 pb-3 shrink-0">
-        <h1 className="font-display text-2xl">Nearby</h1>
+        <img src="/logo.png" alt="Nearby" className="h-9 w-9 rounded-xl" />
         <button onClick={() => navigate('/profile/edit')}
           className="h-9 w-9 overflow-hidden rounded-full border-2 border-paper/20">
           {myProfile?.photo_url
