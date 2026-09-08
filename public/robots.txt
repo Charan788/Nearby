@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://nearby-dating-app.vercel.app/sitemap.xml
