@@ -88,8 +88,9 @@ export default function Discover() {
 
       if (theirSwipe) {
         const { data: match } = await supabase
-          .from('matches').insert({ user_a: myId, user_b: swiped.id })
-          .select().single()
+          .from('matches').select('id')
+          .or(`and(user_a.eq.${myId},user_b.eq.${swiped.id}),and(user_a.eq.${swiped.id},user_b.eq.${myId})`)
+          .maybeSingle()
         setMatchedProfile({
           ...swiped,
           matchId: match?.id,
@@ -144,8 +145,9 @@ export default function Discover() {
 
     if (theirSwipe) {
       const { data: match } = await supabase
-        .from('matches').insert({ user_a: myId, user_b: swiped.id })
-        .select().single()
+        .from('matches').select('id')
+        .or(`and(user_a.eq.${myId},user_b.eq.${swiped.id}),and(user_a.eq.${swiped.id},user_b.eq.${myId})`)
+        .maybeSingle()
       setMatchedProfile({ ...swiped, matchId: match?.id })
     }
   }, [profiles, myId])

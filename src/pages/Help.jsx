@@ -58,8 +58,15 @@ export default function Help() {
     if (!form.subject || !form.message) return
     setSending(true)
 
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setSending(false)
+      return
+    }
+
     // Save to Supabase support_tickets table
     await supabase.from('support_tickets').insert({
+      user_id: user.id,
       email: userEmail,
       subject: form.subject,
       message: form.message,

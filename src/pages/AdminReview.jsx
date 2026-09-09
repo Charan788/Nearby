@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase.js'
 
-const ADMIN_PASSWORD = 'arclight2024' // change this to something only you know
-
 export default function AdminReview() {
   const [authed, setAuthed] = useState(false)
-  const [pw, setPw] = useState('')
+  const [checkingAccess, setCheckingAccess] = useState(true)
   const [pending, setPending] = useState([])
   const [loading, setLoading] = useState(true)
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 })
@@ -13,10 +11,16 @@ export default function AdminReview() {
   const [tickets, setTickets] = useState([])
   const [reports, setReports] = useState([])
 
-  const login = () => {
-    if (pw === ADMIN_PASSWORD) setAuthed(true)
-    else alert('Wrong password')
-  }
+  useEffect(() => {
+    async function checkAccess() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { setCheckingAccess(false); return }
+      const { data: isAdmin } = await supabase.rpc('is_admin')
+      setAuthed(isAdmin === true)
+      setCheckingAccess(false)
+    }
+    checkAccess()
+  }, [])
 
   useEffect(() => {
     if (!authed) return
@@ -125,23 +129,16 @@ export default function AdminReview() {
     loadCounts()
   }
 
+  if (checkingAccess) {
+    return <div className="flex min-h-screen items-center justify-center bg-ink text-paper/50">Checking access…</div>
+  }
+
   if (!authed) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-ink px-6">
         <div className="w-full max-w-sm">
-          <h1 className="font-display text-3xl text-paper">Admin access</h1>
-          <input
-            type="password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && login()}
-            placeholder="Password"
-            className="mt-6 w-full rounded-xl border border-paper/15 bg-ink-light px-4 py-3 text-paper outline-none focus:border-ember"
-          />
-          <button onClick={login}
-            className="mt-4 w-full rounded-full bg-ember py-3 font-medium text-ink">
-            Enter
-          </button>
+          <h1 className="font-display text-3xl text-paper">Admin access required</h1>
+          <p className="mt-3 text-paper/60">Sign in with an account granted moderator access by the database administrator.</p>
         </div>
       </div>
     )

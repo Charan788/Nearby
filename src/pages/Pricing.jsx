@@ -62,24 +62,17 @@ export default function Pricing() {
   }
 
   const activatePlan = async (planKey, paymentId) => {
-    const expiresAt = new Date()
-    expiresAt.setMonth(expiresAt.getMonth() + 1)
-
-    await supabase.from('profiles').update({
-      plan: planKey,
-      plan_expires_at: expiresAt.toISOString(),
-    }).eq('id', myId)
-
-    await supabase.from('subscriptions').upsert({
-      user_id: myId,
-      plan: planKey,
-      status: 'active',
-      razorpay_payment_id: paymentId,
-      current_period_start: new Date().toISOString(),
-      current_period_end: expiresAt.toISOString(),
+    // A payment id from the browser is not proof of payment. The Edge Function
+    // must verify Razorpay's signature before it changes a subscription.
+    const { data, error } = await supabase.functions.invoke('verify-razorpay-payment', {
+      body: { planKey, paymentId },
     })
-
-    setCurrentPlan(planKey)
+    if (error || !data?.active) {
+      setPaying(null)
+      alert('We could not verify this payment. Your account was not charged or upgraded.')
+      return
+    }
+    setCurrentPlan(data.plan)
     setPaying(null)
     setShowSuccess(true)
     setTimeout(() => setShowSuccess(false), 3000)
